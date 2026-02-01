@@ -31,7 +31,7 @@ const Leads: React.FC<LeadsProps> = ({ leads, onUpdateLead }) => {
 
     return leads.filter((lead) => {
       // Hide DQ completely
-      if (lead.status === LeadStatus.DQ) return false;
+      //if (lead.status === LeadStatus.DQ) return false;
 
       // Map Live → Leads tab
       const displayStatus =
