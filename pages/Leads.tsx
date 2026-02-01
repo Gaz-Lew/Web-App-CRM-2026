@@ -2,6 +2,34 @@ import React, { useMemo, useState } from 'react';
 import { Lead } from '../types';
 import LeadDetailModal from '../components/LeadDetailModal';
 
+/* ---------------- HELPERS ---------------- */
+
+const formatDate = (value?: string) => {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return value;
+  return d.toLocaleDateString('en-AU'); // dd/mm/yyyy
+};
+
+const formatPhoneAU = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length !== 10) return phone;
+  return digits.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
+};
+
+const statusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'DQ':
+      return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+    case 'LIVE':
+      return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+    case 'REVISIT':
+      return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+    default:
+      return 'bg-slate-700 text-slate-400';
+  }
+};
+
 type LeadTab = 'Leads' | 'Revisit';
 
 interface LeadsProps {
@@ -12,75 +40,124 @@ interface LeadsProps {
 const Leads: React.FC<LeadsProps> = ({ leads, onUpdateLead }) => {
   const [activeTab, setActiveTab] = useState<LeadTab>('Leads');
   const [searchQuery, setSearchQuery] = useState('');
+  const [repFilter, setRepFilter] = useState('');
+  const [suburbFilter, setSuburbFilter] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
   const [selectedLead, setSelectedLead] = useState<{
     lead: Lead;
     focusCallResult: boolean;
   } | null>(null);
 
-  const tabs: LeadTab[] = ['Leads', 'Revisit'];
-
   const filteredLeads = useMemo(() => {
     const search = searchQuery.toLowerCase().trim();
 
     return leads.filter((lead) => {
-      // Hide terminal leads only (Not Interested, Wrong Number)
+      // Hide terminal outcomes only
       if (lead.status === 'TERMINAL') return false;
 
-      // DQ + LIVE appear in main Leads tab
-      const displayStatus: LeadTab =
+      // Tab mapping
+      const displayTab: LeadTab =
         lead.status === 'DQ' || lead.status === 'LIVE'
           ? 'Leads'
           : 'Revisit';
 
-      if (displayStatus !== activeTab) return false;
+      if (displayTab !== activeTab) return false;
 
-      // Search by name or address
-      if (!search) return true;
+      // Search
+      if (
+        search &&
+        !lead.name.toLowerCase().includes(search) &&
+        !lead.address.toLowerCase().includes(search)
+      ) {
+        return false;
+      }
 
-      return (
-        lead.name.toLowerCase().includes(search) ||
-        lead.address.toLowerCase().includes(search)
-      );
+      // Rep filter
+      if (repFilter && lead.generatedBy !== repFilter) return false;
+
+      // Suburb filter
+      if (suburbFilter && !lead.address.toLowerCase().includes(suburbFilter.toLowerCase())) {
+        return false;
+      }
+
+      // Date range
+      if (fromDate && new Date(lead.lastContactDate) < new Date(fromDate)) return false;
+      if (toDate && new Date(lead.lastContactDate) > new Date(toDate)) return false;
+
+      return true;
     });
-  }, [leads, activeTab, searchQuery]);
+  }, [leads, activeTab, searchQuery, repFilter, suburbFilter, fromDate, toDate]);
+
+  /* -------- GROUP BY DATE -------- */
+
+  const groupedLeads = useMemo(() => {
+    const groups: Record<string, Lead[]> = {};
+
+    filteredLeads.forEach((lead) => {
+      const key = lead.lastContactDate
+        ? formatDate(lead.lastContactDate)
+        : 'No Date';
+
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(lead);
+    });
+
+    return Object.entries(groups);
+  }, [filteredLeads]);
 
   return (
-    <div className="flex flex-col animate-in fade-in duration-500">
+    <div className="flex flex-col">
 
-      {/* Search */}
-      <div className="relative mb-6">
+      {/* SEARCH + FILTERS */}
+      <div className="space-y-3 mb-6">
         <input
           type="text"
-          placeholder="Search leads by name or address"
+          placeholder="Search by name or address"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-11 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none placeholder-slate-500"
+          className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm"
         />
-        <svg
-          className="absolute left-4 top-3.5 w-4 h-4 text-slate-500"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <input
+            placeholder="Filter by suburb"
+            value={suburbFilter}
+            onChange={(e) => setSuburbFilter(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm"
           />
-        </svg>
+          <input
+            placeholder="Filter by rep"
+            value={repFilter}
+            onChange={(e) => setRepFilter(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm"
+          />
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm"
+          />
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm"
+          />
+        </div>
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-2 overflow-x-auto pb-6 scrollbar-hide">
-        {tabs.map((tab) => (
+      {/* TABS */}
+      <div className="flex gap-2 mb-6">
+        {(['Leads', 'Revisit'] as LeadTab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-6 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all ${
+            className={`px-5 py-2 rounded-full text-sm font-semibold ${
               activeTab === tab
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40'
-                : 'bg-slate-900 text-slate-400 hover:text-white'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-900 text-slate-400'
             }`}
           >
             {tab}
@@ -88,64 +165,52 @@ const Leads: React.FC<LeadsProps> = ({ leads, onUpdateLead }) => {
         ))}
       </div>
 
-      {/* Lead List */}
-      <div className="space-y-3">
-        {filteredLeads.length > 0 ? (
-          filteredLeads.map((lead) => (
-            <div
-              key={lead.id}
-              onClick={() =>
-                setSelectedLead({ lead, focusCallResult: false })
-              }
-              className="group bg-slate-900/50 hover:bg-slate-800/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-all active:scale-[0.98]"
-            >
-              <div className="flex-1 min-w-0 pr-4">
-                <h4 className="font-bold text-white text-lg mb-0.5">
-                  {lead.name}
-                </h4>
-                <p className="text-slate-500 text-sm truncate">
-                  {lead.address}
-                </p>
+      {/* GROUPED LEADS */}
+      {groupedLeads.map(([date, leads]) => (
+        <div key={date}>
+          <h3 className="text-xs uppercase tracking-wider text-slate-500 mb-2 mt-6">
+            {date}
+          </h3>
 
-                {lead.callLogged && (
-                  <div className="mt-3 inline-flex items-center gap-1.5 bg-slate-800 px-2.5 py-1 rounded-md text-[10px] font-bold text-slate-400 uppercase tracking-widest border border-slate-700">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                    CALL LOGGED
-                  </div>
-                )}
-              </div>
-
-              {/* Call / Open Detail */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedLead({ lead, focusCallResult: true });
-                }}
-                className="w-12 h-12 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-full flex items-center justify-center transition-all flex-shrink-0"
-                aria-label="Open call actions"
+          <div className="space-y-3">
+            {leads.map((lead) => (
+              <div
+                key={lead.id}
+                onClick={() => setSelectedLead({ lead, focusCallResult: false })}
+                className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex justify-between cursor-pointer"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                </svg>
-              </button>
-            </div>
-          ))
-        ) : (
-          <div className="text-center py-20">
-            <p className="text-slate-500 font-medium">
-              {searchQuery
-                ? 'No leads found'
-                : 'No leads match this status'}
-            </p>
-          </div>
-        )}
-      </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="font-bold">{lead.name}</h4>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full border ${statusBadgeClass(lead.status)}`}
+                    >
+                      {lead.status}
+                    </span>
+                  </div>
 
-      {/* Lead Detail Modal */}
+                  <p className="text-slate-500 text-sm">{lead.address}</p>
+                  <p className="text-slate-400 text-xs">
+                    {formatPhoneAU(lead.phone)}
+                  </p>
+                </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedLead({ lead, focusCallResult: true });
+                  }}
+                  className="text-blue-400"
+                >
+                  Call
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* MODAL */}
       {selectedLead && (
         <LeadDetailModal
           lead={selectedLead.lead}
