@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Lead, LeadStatus } from '../types';
+import { Lead } from '../types';
 import LeadDetailModal from '../components/LeadDetailModal';
 
-type LeadTab = 'Leads' | 'Revisit' | 'Booked';
+type LeadTab = 'Leads' | 'Revisit';
 
 interface LeadsProps {
   leads: Lead[];
@@ -17,29 +17,24 @@ const Leads: React.FC<LeadsProps> = ({ leads, onUpdateLead }) => {
     focusCallResult: boolean;
   } | null>(null);
 
-  const tabs: LeadTab[] = ['Leads', 'Revisit', 'Booked'];
+  const tabs: LeadTab[] = ['Leads', 'Revisit'];
 
-  /**
-   * Filtered leads:
-   * - DQ is hidden
-   * - Live maps to "Leads"
-   * - Status tabs are filters, not routes
-   * - Search applies to name + address only
-   */
   const filteredLeads = useMemo(() => {
     const search = searchQuery.toLowerCase().trim();
 
     return leads.filter((lead) => {
-      // Hide DQ completely
-      //if (lead.status === LeadStatus.DQ) return false;
+      // Hide terminal leads only (Not Interested, Wrong Number)
+      if (lead.status === 'TERMINAL') return false;
 
-      // Map Live → Leads tab
-      const displayStatus =
-        lead.status === LeadStatus.LIVE ? 'Leads' : lead.status;
+      // DQ + LIVE appear in main Leads tab
+      const displayStatus: LeadTab =
+        lead.status === 'DQ' || lead.status === 'LIVE'
+          ? 'Leads'
+          : 'Revisit';
 
       if (displayStatus !== activeTab) return false;
 
-      // Search by name or address only
+      // Search by name or address
       if (!search) return true;
 
       return (
@@ -51,6 +46,7 @@ const Leads: React.FC<LeadsProps> = ({ leads, onUpdateLead }) => {
 
   return (
     <div className="flex flex-col animate-in fade-in duration-500">
+
       {/* Search */}
       <div className="relative mb-6">
         <input
