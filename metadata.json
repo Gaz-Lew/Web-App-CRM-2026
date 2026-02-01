@@ -1,0 +1,7 @@
+{
+  "name": "ASG Live Leads - Mini CRM",
+  "description": "A high-performance mobile-first CRM for managing and logging leads synced with Google Sheets, featuring real-time activity tracking and bulk upload capabilities.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
